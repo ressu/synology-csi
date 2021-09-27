@@ -33,8 +33,7 @@ import (
 
 	"golang.org/x/net/context"
 
-	"k8s.io/kubernetes/pkg/util/resizefs"
-	"k8s.io/utils/exec"
+	mu "k8s.io/mount-utils"
 	utilexec "k8s.io/utils/exec"
 	"k8s.io/utils/mount"
 
@@ -334,7 +333,7 @@ func (ns *nodeServer) NodeExpandVolume(ctx context.Context, req *csi.NodeExpandV
 	}
 
 	// resize file system
-	r := resizefs.NewResizeFs(mounter)
+	r := mu.NewResizeFs(utilexec.New())
 	if _, err := r.Resize(devicePath, volumePath); err != nil {
 		return nil, status.Errorf(codes.Internal, "Could not resize volume %s to %s: %s", devicePath, volumePath, err.Error())
 	}
@@ -347,7 +346,7 @@ func (ns *nodeServer) hasSession(iqn string) (bool, error) {
 	// check if we already have a session
 	sessions, err := ns.iscsiDrv.session()
 	if err != nil {
-		if exiterr, ok := err.(exec.ExitError); ok {
+		if exiterr, ok := err.(utilexec.ExitError); ok {
 			if exiterr.ExitStatus() == 21 {
 				// This is OK -- this means "no sessions"
 				return false, nil
