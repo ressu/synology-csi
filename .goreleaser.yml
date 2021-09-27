@@ -18,6 +18,8 @@ builds:
       - 7
     ldflags:
       - -extldflags "-static"
+
+# docker rules, overly verbose but it is what is is..
 dockers:
   - image_templates:
     - "ghcr.io/ressu/synology-csi:{{.Tag}}-amd64"
@@ -28,6 +30,11 @@ dockers:
     dockerfile: Dockerfile
     goarch: amd64
     build_flag_templates:
+    - "--label=org.opencontainers.image.source=https://github.com/ressu/synology-csi"
+    - "--label=org.opencontainers.image.created={{.Date}}"
+    - "--label=org.opencontainers.image.title={{.ProjectName}}"
+    - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+    - "--label=org.opencontainers.image.version={{.Version}}"
     - "--platform=linux/amd64"
   - image_templates:
     - "ghcr.io/ressu/synology-csi:{{.Tag}}-arm64"
@@ -38,6 +45,11 @@ dockers:
     dockerfile: Dockerfile
     goarch: arm64
     build_flag_templates:
+    - "--label=org.opencontainers.image.source=https://github.com/ressu/synology-csi"
+    - "--label=org.opencontainers.image.created={{.Date}}"
+    - "--label=org.opencontainers.image.title={{.ProjectName}}"
+    - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+    - "--label=org.opencontainers.image.version={{.Version}}"
     - "--platform=linux/arm64"
   - image_templates:
     - "ghcr.io/ressu/synology-csi:{{.Tag}}-armv7"
@@ -49,6 +61,11 @@ dockers:
     goarch: arm
     goarm: 7
     build_flag_templates:
+    - "--label=org.opencontainers.image.source=https://github.com/ressu/synology-csi"
+    - "--label=org.opencontainers.image.created={{.Date}}"
+    - "--label=org.opencontainers.image.title={{.ProjectName}}"
+    - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+    - "--label=org.opencontainers.image.version={{.Version}}"
     - "--platform=linux/arm/v7"
   - image_templates:
     - "ghcr.io/ressu/synology-csi:{{.Tag}}-ppc64le"
@@ -59,6 +76,11 @@ dockers:
     dockerfile: Dockerfile
     goarch: ppc64le
     build_flag_templates:
+    - "--label=org.opencontainers.image.source=https://github.com/ressu/synology-csi"
+    - "--label=org.opencontainers.image.created={{.Date}}"
+    - "--label=org.opencontainers.image.title={{.ProjectName}}"
+    - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+    - "--label=org.opencontainers.image.version={{.Version}}"
     - "--platform=linux/ppc64le"
 docker_manifests:
   - name_template: "ghcr.io/ressu/synology-csi:v{{.Major}}"
@@ -79,12 +101,10 @@ docker_manifests:
     - "ghcr.io/ressu/synology-csi:{{.ShortCommit}}-arm64"
     - "ghcr.io/ressu/synology-csi:{{.ShortCommit}}-armv7"
     - "ghcr.io/ressu/synology-csi:{{.ShortCommit}}-ppc64le"
+
 archives:
   - replacements:
-      darwin: Darwin
       linux: Linux
-      windows: Windows
-      386: i386
       amd64: x86_64
 release:
   ids: []
