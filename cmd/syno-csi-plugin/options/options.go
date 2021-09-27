@@ -62,11 +62,15 @@ func ReadConfig(path string) (*options.SynologyOptions, error) {
 	if err != nil {
 		glog.V(1).Infof("Failed to parse config: %v", err)
 		return nil, err
+
+	// Minimum supported API version is 3. Default is API version 6
+	switch {
+	case conf.LoginApiVersion == 0:
+		conf.LoginApiVersion = 6
+	case conf.LoginApiVersion < 3:
+		conf.LoginApiVersion = 3
 	}
 
-	if conf.LoginApiVersion <= 0 {
-		conf.LoginApiVersion = 2
-	}
 	if conf.LoginApiVersion >= 3 {
 		if conf.EnableSynoToken != nil {
 			val := strings.ToLower(*conf.EnableSynoToken)
