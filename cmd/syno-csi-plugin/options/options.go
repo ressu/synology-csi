@@ -62,6 +62,7 @@ func ReadConfig(path string) (*options.SynologyOptions, error) {
 	if err != nil {
 		glog.V(1).Infof("Failed to parse config: %v", err)
 		return nil, err
+	}
 
 	// Minimum supported API version is 3. Default is API version 6
 	switch {
