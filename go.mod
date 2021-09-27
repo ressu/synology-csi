@@ -1,6 +1,6 @@
 module github.com/jparklab/synology-csi
 
-go 1.12
+go 1.17
 
 replace k8s.io/kube-openapi => k8s.io/kube-openapi v0.0.0-20190418200329-18908d120c6b
 
@@ -8,23 +8,34 @@ replace k8s.io/apimachinery => k8s.io/apimachinery v0.18.2-beta.0
 
 require (
 	github.com/avast/retry-go v2.5.0+incompatible
-	github.com/checkpoint-restore/go-criu v0.0.0-20190109184317-bdb7599cd87b // indirect
 	github.com/container-storage-interface/spec v1.2.0
 	github.com/golang/glog v0.0.0-20160126235308-23def4e6c14b
 	github.com/google/go-querystring v1.0.0
 	github.com/kubernetes-csi/drivers v1.0.0
-	github.com/opencontainers/runc v1.0.0-rc9 // indirect
 	github.com/pborman/uuid v1.2.0
-	github.com/rexray/gocsi v1.2.1 // indirect
 	github.com/spf13/cobra v0.0.5
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.4.0
 	golang.org/x/net v0.0.0-20191004110552-13f9640d40b9
 	google.golang.org/grpc v1.26.0
 	gopkg.in/yaml.v2 v2.2.8
-	k8s.io/klog v1.0.0
-	k8s.io/kubernetes v1.18.0 // indirect
-	k8s.io/utils v0.0.0-20200324210504-a9aa75ae1b89
+	k8s.io/kubernetes v1.18.0
+	k8s.io/utils v0.0.0-20210305010621-2afb4311ab10
+)
+
+require (
+	github.com/davecgh/go-spew v1.1.1 // indirect
+	github.com/go-logr/logr v0.1.0 // indirect
+	github.com/golang/protobuf v1.3.2 // indirect
+	github.com/google/uuid v1.1.1 // indirect
+	github.com/inconshreveable/mousetrap v1.0.0 // indirect
+	github.com/pmezard/go-difflib v1.0.0 // indirect
+	github.com/stretchr/objx v0.2.0 // indirect
+	golang.org/x/sys v0.0.0-20191022100944-742c48ecaeb7 // indirect
+	golang.org/x/text v0.3.2 // indirect
+	google.golang.org/genproto v0.0.0-20190819201941-24fa4b261c55 // indirect
+	k8s.io/klog v1.0.0 // indirect
+	k8s.io/klog/v2 v2.0.0 // indirect
 )
 
 replace k8s.io/api => k8s.io/api v0.18.1

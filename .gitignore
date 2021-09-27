@@ -5,4 +5,5 @@
 bin/
 vendors/
 
-.history
+dist/
+/synology-csi-driver

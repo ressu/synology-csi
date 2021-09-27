@@ -1,0 +1,100 @@
+before:
+  hooks:
+    - go mod tidy
+builds:
+  - binary: bin/synology-csi-driver
+    main: ./cmd/syno-csi-plugin
+    # This is parity with jparklab/synology-csi
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+      - arm
+      - ppc64le
+    goarm:
+      - 7
+    ldflags:
+      - -extldflags "-static"
+dockers:
+  - image_templates:
+    - "ghcr.io/ressu/synology-csi:{{.Tag}}-amd64"
+    - "ghcr.io/ressu/synology-csi:v{{.Major}}-amd64"
+    - "ghcr.io/ressu/synology-csi:v{{.Major}}.{{.Minor}}-amd64"
+    - "ghcr.io/ressu/synology-csi:{{.ShortCommit}}-amd64"
+    use: buildx
+    dockerfile: Dockerfile
+    goarch: amd64
+    build_flag_templates:
+    - "--platform=linux/amd64"
+  - image_templates:
+    - "ghcr.io/ressu/synology-csi:{{.Tag}}-arm64"
+    - "ghcr.io/ressu/synology-csi:v{{.Major}}-arm64"
+    - "ghcr.io/ressu/synology-csi:v{{.Major}}.{{.Minor}}-arm64"
+    - "ghcr.io/ressu/synology-csi:{{.ShortCommit}}-arm64"
+    use: buildx
+    dockerfile: Dockerfile
+    goarch: arm64
+    build_flag_templates:
+    - "--platform=linux/arm64"
+  - image_templates:
+    - "ghcr.io/ressu/synology-csi:{{.Tag}}-armv7"
+    - "ghcr.io/ressu/synology-csi:v{{.Major}}-armv7"
+    - "ghcr.io/ressu/synology-csi:v{{.Major}}.{{.Minor}}-armv7"
+    - "ghcr.io/ressu/synology-csi:{{.ShortCommit}}-armv7"
+    use: buildx
+    dockerfile: Dockerfile
+    goarch: arm
+    goarm: 7
+    build_flag_templates:
+    - "--platform=linux/arm/v7"
+  - image_templates:
+    - "ghcr.io/ressu/synology-csi:{{.Tag}}-ppc64le"
+    - "ghcr.io/ressu/synology-csi:v{{.Major}}-ppc64le"
+    - "ghcr.io/ressu/synology-csi:v{{.Major}}.{{.Minor}}-ppc64le"
+    - "ghcr.io/ressu/synology-csi:{{.ShortCommit}}-ppc64le"
+    use: buildx
+    dockerfile: Dockerfile
+    goarch: ppc64le
+    build_flag_templates:
+    - "--platform=linux/ppc64le"
+docker_manifests:
+  - name_template: "ghcr.io/ressu/synology-csi:v{{.Major}}"
+    image_templates:
+    - "ghcr.io/ressu/synology-csi:{{.ShortCommit}}-amd64"
+    - "ghcr.io/ressu/synology-csi:{{.ShortCommit}}-arm64"
+    - "ghcr.io/ressu/synology-csi:{{.ShortCommit}}-armv7"
+    - "ghcr.io/ressu/synology-csi:{{.ShortCommit}}-ppc64le"
+  - name_template: "ghcr.io/ressu/synology-csi:v{{.Major}}.{{.Minor}}"
+    image_templates:
+    - "ghcr.io/ressu/synology-csi:{{.ShortCommit}}-amd64"
+    - "ghcr.io/ressu/synology-csi:{{.ShortCommit}}-arm64"
+    - "ghcr.io/ressu/synology-csi:{{.ShortCommit}}-armv7"
+    - "ghcr.io/ressu/synology-csi:{{.ShortCommit}}-ppc64le"
+  - name_template: "ghcr.io/ressu/synology-csi:{{.Tag}}"
+    image_templates:
+    - "ghcr.io/ressu/synology-csi:{{.ShortCommit}}-amd64"
+    - "ghcr.io/ressu/synology-csi:{{.ShortCommit}}-arm64"
+    - "ghcr.io/ressu/synology-csi:{{.ShortCommit}}-armv7"
+    - "ghcr.io/ressu/synology-csi:{{.ShortCommit}}-ppc64le"
+archives:
+  - replacements:
+      darwin: Darwin
+      linux: Linux
+      windows: Windows
+      386: i386
+      amd64: x86_64
+release:
+  ids: []
+checksum:
+  name_template: 'checksums.txt'
+snapshot:
+  name_template: "{{ incpatch .Version }}-next"
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
