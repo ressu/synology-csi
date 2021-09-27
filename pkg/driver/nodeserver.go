@@ -17,28 +17,24 @@
 package driver
 
 import (
-	"errors"
+	"context"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
-	"io/ioutil"
-
+	"github.com/container-storage-interface/spec/lib/go/csi"
 	"github.com/golang/glog"
-
+	iscsilib "github.com/kubernetes-csi/csi-lib-iscsi/iscsi"
+	csicommon "github.com/kubernetes-csi/drivers/pkg/csi-common"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-
-	"golang.org/x/net/context"
 
 	mu "k8s.io/mount-utils"
 	utilexec "k8s.io/utils/exec"
 	"k8s.io/utils/mount"
-
-	"github.com/container-storage-interface/spec/lib/go/csi"
-	csicommon "github.com/kubernetes-csi/drivers/pkg/csi-common"
 
 	"github.com/jparklab/synology-csi/pkg/synology/api/iscsi"
 )
@@ -54,43 +50,7 @@ type nodeServer struct {
 	targetAPI iscsi.TargetAPI
 	lunAPI    iscsi.LunAPI
 
-	iscsiDrv iscsiDriver
-}
-
-func getDevicePath(targetDevPath string) string {
-	diskDevPath := "/dev/disk/by-path"
-
-	if entries, err := ioutil.ReadDir(diskDevPath); err == nil {
-		for _, f := range entries {
-			// example:
-			//    ip-192.168.1.196:3260-iscsi-iqn.2000-01.com.synology:JPNAS02.Target-23.cf8d920aa9-lun-1
-			glog.V(5).Info(f.Name())
-			if strings.Index(f.Name(), targetDevPath) != -1 {
-				return strings.Join([]string{diskDevPath, f.Name()}, "/")
-			}
-		}
-	}
-
-	return ""
-}
-
-func probeDevice(targetDevPath string) (string, error) {
-	ticker := time.NewTicker(probeDeviceInterval)
-	defer ticker.Stop()
-	timer := time.NewTimer(probeDeviceTimeout)
-	defer timer.Stop()
-
-	for {
-		select {
-		case <-ticker.C:
-			if devicePath := getDevicePath(targetDevPath); devicePath != "" {
-				return devicePath, nil
-			}
-		case <-timer.C:
-			return "", fmt.Errorf("Timed out while waiting for device for %s", targetDevPath)
-
-		}
-	}
+	iscsiPortals []string
 }
 
 // NodePublishVolume mounts the volume to target path
@@ -114,44 +74,17 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 		return nil, status.Error(codes.NotFound, msg)
 	}
 
-	// run discovery to add target
-	if err = ns.iscsiDrv.discovery(); err != nil {
-		msg := fmt.Sprintf("Failed to run ISCSI discovery: %v", err)
-		glog.V(3).Info(msg)
-		return nil, status.Error(codes.Internal, msg)
+	c := iscsilib.Connector{
+		TargetIqn:     target.IQN,
+		TargetPortals: ns.iscsiPortals,
+		Lun:           int32(mappingIndex),
 	}
 
-	hasSession, err := ns.hasSession(target.IQN)
+	devicePath, err := iscsilib.Connect(c)
 	if err != nil {
-		return nil, err
-	}
-
-	if hasSession {
-		glog.V(5).Infof("Found an existing session for %s", target.IQN)
-	} else {
-		// login
-		if err = ns.iscsiDrv.login(target); err != nil {
-			msg := fmt.Sprintf("Failed to run ISCSI login: %v", err)
-			glog.V(3).Info(msg)
-			return nil, status.Error(codes.Internal, msg)
-		}
-
-		defer func() {
-			// logout target when we fail to mount
-			if err != nil {
-				_ = ns.iscsiDrv.logout(target)
-			}
-		}()
-	}
-
-	// find device mapped to the target
-	targetDevPath := fmt.Sprintf("%s-lun-%d", target.IQN, mappingIndex)
-
-	devicePath, err := probeDevice(targetDevPath)
-	if err != nil {
-		msg := fmt.Sprintf("Failed to find device for %s", targetDevPath)
+		msg := fmt.Sprintf("failed to connect to iSCSI target %s: %v", target.IQN, err)
 		glog.V(3).Info(msg)
-		return nil, errors.New(msg)
+		return nil, status.Errorf(codes.Internal, msg)
 	}
 
 	glog.V(5).Infof("Checking mount point: %s", targetPath)
@@ -257,7 +190,7 @@ func (ns *nodeServer) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpu
 	// logout target
 	// NOTE: we can safely log out because we do not share the target
 	//	and we only support targets with a single lun
-	if err = ns.iscsiDrv.logout(target); err != nil {
+	if err = iscsilib.Disconnect(target.IQN, ns.iscsiPortals); err != nil {
 		msg := fmt.Sprintf(
 			"Failed to logout(iqn: %s): %v", target.IQN, err)
 		glog.V(3).Info(msg)
@@ -339,32 +272,6 @@ func (ns *nodeServer) NodeExpandVolume(ctx context.Context, req *csi.NodeExpandV
 	}
 
 	return &csi.NodeExpandVolumeResponse{}, nil
-}
-
-// Check if session exists for the given IQN
-func (ns *nodeServer) hasSession(iqn string) (bool, error) {
-	// check if we already have a session
-	sessions, err := ns.iscsiDrv.session()
-	if err != nil {
-		if exiterr, ok := err.(utilexec.ExitError); ok {
-			if exiterr.ExitStatus() == 21 {
-				// This is OK -- this means "no sessions"
-				return false, nil
-			}
-		}
-
-		msg := fmt.Sprintf("Unable to list existing sessions: %v", err)
-		glog.V(3).Info(msg)
-		return false, status.Error(codes.Internal, msg)
-	}
-
-	for _, sess := range sessions {
-		if sess.IQN == iqn {
-			return true, nil
-		}
-	}
-
-	return false, nil
 }
 
 func (ns *nodeServer) NodeGetCapabilities(context.Context, *csi.NodeGetCapabilitiesRequest) (*csi.NodeGetCapabilitiesResponse, error) {

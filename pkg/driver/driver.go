@@ -121,6 +121,6 @@ func newNodeServer(d *driver) *nodeServer {
 		DefaultNodeServer: csicommon.NewDefaultNodeServer(d.csiDriver),
 		lunAPI:            iscsi.NewLunAPI(d.session),
 		targetAPI:         iscsi.NewTargetAPI(d.session),
-		iscsiDrv:          iscsiDriver{synologyHost: d.synologyHost},
+		iscsiPortals:      []string{d.synologyHost},
 	}
 }
