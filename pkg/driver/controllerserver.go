@@ -105,7 +105,7 @@ func (cs *controllerServer) ControllerExpandVolume(ctx context.Context, req *csi
 	}
 	capacity, _ := strconv.ParseInt(vol.SizeFreeByte, 10, 64)
 	if capacity < (requestGb<<30 - currentGb<<30) {
-		msg := fmt.Sprintf("no enough space in synology volume: %s Byte left", capacity)
+		msg := fmt.Sprintf("no enough space in synology volume: %d Byte left", capacity)
 		return nil, status.Error(codes.Internal, msg)
 	}
 
