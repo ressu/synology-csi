@@ -3,6 +3,6 @@
 .idea/
 .vscode/
 bin/
-go.sum
+vendors/
 
 .history
