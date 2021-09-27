@@ -18,11 +18,12 @@ package core
 
 import (
 	"fmt"
-	"github.com/jparklab/synology-csi/pkg/synology/options"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"testing"
+
+	"github.com/jparklab/synology-csi/pkg/synology/options"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -52,18 +53,13 @@ func TestSessionLogin(t *testing.T) {
 		switch req.URL.Path {
 		case "/webapi/auth.cgi":
 			{
-				method := params.Get("method")
-				if method == "login" {
-					resp.Write([]byte(`{
-						"data": { "sid": "test_sid" },
-						"success": true
-					}`))
-				} else {
-					assert.Equal(t, "SYNO.Core.Security.DSM", params.Get("api"))
-					resp.Write([]byte(`{
-						"timeout": 10
-					}`))
-				}
+				assert.Equal(t, "login", params.Get("method"))
+				resp.Write([]byte(`{ "data": { "sid": "test_sid" }, "success": true }`))
+			}
+		case "/webapi/entry.cgi":
+			{
+				assert.Equal(t, "SYNO.Core.Security.DSM", params.Get("api"))
+				resp.Write([]byte(`{ "data": { "timeout": 10 }, "success": true }`))
 			}
 		}
 	}))
@@ -74,10 +70,10 @@ func TestSessionLogin(t *testing.T) {
 	s := NewSession(baseURL, "Core")
 
 	// test login
-	sid, err := s.Login(&options.SynologyOptions{
-		Username: "username",
-		Password: "password",
-	})
+	so := options.NewSynologyOptions()
+	so.Username = "username"
+	so.Password = "password"
+	sid, err := s.Login(&so)
 
 	assert.NoError(t, err)
 	assert.Equal(t, "test_sid", sid)
@@ -94,10 +90,7 @@ func TestAPIEntry(t *testing.T) {
 			{
 				method := params.Get("method")
 				if method == "login" {
-					resp.Write([]byte(fmt.Sprintf(`{
-						"data": { "sid": "%s" },
-						"success": true
-					}`, sid)))
+					fmt.Fprintf(resp, `{ "data": { "sid": "%s" }, "success": true }`, sid)
 				} else {
 					assert.Equal(t, "SYNO.Core.Security.DSM", params.Get("api"))
 					resp.Write([]byte(`{
@@ -107,15 +100,15 @@ func TestAPIEntry(t *testing.T) {
 			}
 		case "/webapi/entry.cgi":
 			{
-				assert.Equal(t, "TestAPI", params.Get("api"))
-				assert.Equal(t, sid, params.Get("_sid"))
+				switch params.Get("api") {
+				case "SYNO.Core.Security.DSM":
+					resp.Write([]byte(`{ "data": { "timeout": 1 }, "success": true }`))
+				case "TestAPI":
+					assert.Equal(t, sid, params.Get("_sid"))
+					assert.Equal(t, "sample", params.Get("name"))
 
-				assert.Equal(t, "sample", params.Get("name"))
-
-				resp.Write([]byte(`{ 
-					"data": { "value": "value_1" },
-					"success": true
-				}`))
+					resp.Write([]byte(`{ "data": { "value": "value_1" }, "success": true }`))
+				}
 			}
 		}
 	}))
@@ -125,10 +118,10 @@ func TestAPIEntry(t *testing.T) {
 	baseURL := fmt.Sprintf("%s/webapi", testServer.URL)
 	s := NewSession(baseURL, "Core")
 
-	s.Login(&options.SynologyOptions{
-		Username: "username",
-		Password: "password",
-	})
+	so := options.NewSynologyOptions()
+	so.Username = "username"
+	so.Password = "password"
+	s.Login(&so)
 
 	api := NewAPIEntry(s, "entry.cgi", "TestAPI", "1")
 

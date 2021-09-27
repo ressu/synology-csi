@@ -173,7 +173,7 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 		if !os.IsNotExist(err) {
 			return nil, status.Errorf(codes.Internal, "failed to check mount target: %v", err)
 		}
-		glog.V(6).Info("Creating mount directory: %s", targetPath)
+		glog.V(6).Infof("Creating mount directory: %s", targetPath)
 		err = os.Mkdir(targetPath, 0750)
 		if err != nil {
 			return nil, status.Errorf(codes.Internal, "failed to create mount directory: %v", err)

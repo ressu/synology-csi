@@ -81,10 +81,10 @@ func ReadConfig(path string) (*options.SynologyOptions, error) {
 	}
 	if conf.LoginApiVersion >= 6 {
 		if conf.DeviceId == nil || *conf.DeviceId == "" {
-			deviceId := os.Getenv("DEVICE_ID")
-			conf.DeviceId = &deviceId
-			if deviceId != "" {
-				glog.V(1).Info("Using DEVICE_ID from environment variables: %v", deviceId)
+			deviceID := os.Getenv("DEVICE_ID")
+			conf.DeviceId = &deviceID
+			if deviceID != "" {
+				glog.V(1).Infof("Using DEVICE_ID from environment variables: %v", deviceID)
 			}
 		}
 		if conf.EnableDeviceToken != nil {
