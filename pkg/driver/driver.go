@@ -19,11 +19,9 @@ package driver
 import (
 	"fmt"
 
+	"github.com/container-storage-interface/spec/lib/go/csi"
 	"github.com/golang/glog"
-
-	csicommon "github.com/kubernetes-csi/drivers/pkg/csi-common"
-
-	csi "github.com/container-storage-interface/spec/lib/go/csi"
+	"k8s.io/klog/v2"
 
 	"github.com/jparklab/synology-csi/pkg/synology/api/iscsi"
 	"github.com/jparklab/synology-csi/pkg/synology/api/storage"
@@ -34,8 +32,6 @@ import (
 const (
 	// DriverName is the name of csi driver for synology
 	DriverName = "csi.synology.com"
-
-	version = "0.2.0"
 )
 
 // Driver is top interface to run server
@@ -44,12 +40,17 @@ type Driver interface {
 }
 
 type driver struct {
-	csiDriver *csicommon.CSIDriver
+	name    string
+	nodeID  string
+	version string
 
 	endpoint string
 
 	synologyHost string
 	session      core.Session
+
+	cap   []*csi.VolumeCapability_AccessMode
+	cscap []*csi.ControllerServiceCapability
 }
 
 func Login(synoOption *options.SynologyOptions) (*core.Session, string, error) {
@@ -71,8 +72,8 @@ func Login(synoOption *options.SynologyOptions) (*core.Session, string, error) {
 }
 
 // NewDriver creates a Driver object
-func NewDriver(nodeID string, endpoint string, synoOption *options.SynologyOptions) (Driver, error) {
-	glog.Infof("Driver: %v", DriverName)
+func NewDriver(nodeID, endpoint, version string, synoOption *options.SynologyOptions) (Driver, error) {
+	klog.Infof("Driver: %v", DriverName)
 
 	session, _, err := Login(synoOption)
 	if err != nil {
@@ -81,46 +82,78 @@ func NewDriver(nodeID string, endpoint string, synoOption *options.SynologyOptio
 	}
 
 	d := &driver{
+		name:    DriverName,
+		nodeID:  nodeID,
+		version: version,
+
 		endpoint:     endpoint,
 		synologyHost: synoOption.Host,
 		session:      *session,
 	}
 
-	csiDriver := csicommon.NewCSIDriver(DriverName, version, nodeID)
-	csiDriver.AddControllerServiceCapabilities(
+	d.AddControllerServiceCapabilities(
 		[]csi.ControllerServiceCapability_RPC_Type{
 			csi.ControllerServiceCapability_RPC_LIST_VOLUMES,
 			csi.ControllerServiceCapability_RPC_CREATE_DELETE_VOLUME,
 			csi.ControllerServiceCapability_RPC_PUBLISH_UNPUBLISH_VOLUME,
 			csi.ControllerServiceCapability_RPC_EXPAND_VOLUME,
-		})
-	csiDriver.AddVolumeCapabilityAccessModes(
-		[]csi.VolumeCapability_AccessMode_Mode{csi.VolumeCapability_AccessMode_SINGLE_NODE_WRITER})
+		},
+	)
 
-	d.csiDriver = csiDriver
+	d.AddVolumeCapabilityAccessModes(
+		[]csi.VolumeCapability_AccessMode_Mode{csi.VolumeCapability_AccessMode_SINGLE_NODE_WRITER},
+	)
 
 	return d, nil
 }
 
 func (d *driver) Run() {
-	csicommon.RunControllerandNodePublishServer(d.endpoint, d.csiDriver, newControllerServer(d), newNodeServer(d))
+	s := NewNonBlockingGRPCServer()
+	s.Start(d.endpoint,
+		newDefaultIdentityServer(d),
+		newControllerServer(d),
+		newNodeServer(d))
+	s.Wait()
+}
+
+func (d *driver) AddVolumeCapabilityAccessModes(vc []csi.VolumeCapability_AccessMode_Mode) []*csi.VolumeCapability_AccessMode {
+	var vca []*csi.VolumeCapability_AccessMode
+	for _, c := range vc {
+		klog.Infof("Enabling volume access mode: %v", c.String())
+		vca = append(vca, &csi.VolumeCapability_AccessMode{Mode: c})
+	}
+	d.cap = vca
+	return vca
+}
+
+func (d *driver) AddControllerServiceCapabilities(cl []csi.ControllerServiceCapability_RPC_Type) {
+	var csc []*csi.ControllerServiceCapability
+
+	for _, c := range cl {
+		klog.Infof("Enabling controller service capability: %v", c.String())
+		csc = append(csc, newControllerServiceCapability(c))
+	}
+
+	d.cscap = csc
+
+	return
 }
 
 func newControllerServer(d *driver) *controllerServer {
-	glog.V(3).Infof("Create controller: %v", d.csiDriver)
+	klog.Infof("Create controller: %v", d)
 	return &controllerServer{
-		DefaultControllerServer: csicommon.NewDefaultControllerServer(d.csiDriver),
-		lunAPI:                  iscsi.NewLunAPI(d.session),
-		targetAPI:               iscsi.NewTargetAPI(d.session),
-		volumeAPI:               storage.NewVolumeAPI(d.session),
+		driver:    d,
+		lunAPI:    iscsi.NewLunAPI(d.session),
+		targetAPI: iscsi.NewTargetAPI(d.session),
+		volumeAPI: storage.NewVolumeAPI(d.session),
 	}
 }
 
 func newNodeServer(d *driver) *nodeServer {
 	return &nodeServer{
-		DefaultNodeServer: csicommon.NewDefaultNodeServer(d.csiDriver),
-		lunAPI:            iscsi.NewLunAPI(d.session),
-		targetAPI:         iscsi.NewTargetAPI(d.session),
-		iscsiPortals:      []string{d.synologyHost},
+		driver:       d,
+		lunAPI:       iscsi.NewLunAPI(d.session),
+		targetAPI:    iscsi.NewTargetAPI(d.session),
+		iscsiPortals: []string{d.synologyHost},
 	}
 }

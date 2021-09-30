@@ -23,10 +23,41 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+	"k8s.io/klog/v2"
 
 	"github.com/jparklab/synology-csi/cmd/syno-csi-plugin/options"
 	"github.com/jparklab/synology-csi/pkg/driver"
 )
+
+var (
+	version = "(dev)"
+	commit  = "none"
+	date    = "unknown"
+)
+
+// initKlog is a workaround to initialize klog while glog is still being used
+// TODO: remove the below workaround with this once glog is gone
+func initKlog() {
+	klogFlags := flag.NewFlagSet("klog", flag.ExitOnError)
+	klog.InitFlags(klogFlags)
+
+	// Sync the glog and klog flags.
+	flag.CommandLine.VisitAll(func(f1 *flag.Flag) {
+		f2 := klogFlags.Lookup(f1.Name)
+		if f2 != nil {
+			value := f1.Value.String()
+			f2.Value.Set(value)
+		}
+	})
+}
+
+var versionCmd = &cobra.Command{
+	Use:   "version",
+	Short: "Print version information",
+	Run: func(cmd *cobra.Command, args []string) {
+		fmt.Printf("Synology CSI plugin version %v, Build date: %s, Commit ID: %s\n", version, date, commit)
+	},
+}
 
 func main() {
 	runOptions := options.NewRunOptions()
@@ -39,6 +70,10 @@ func main() {
 
 			endpoint := runOptions.Endpoint
 			nodeID := runOptions.NodeID
+
+			initKlog()
+
+			klog.V(1).Infof("Synology CSI plugin version %s starting.", version)
 
 			synoOption, err := options.ReadConfig(runOptions.SynologyConf)
 			if err != nil {
@@ -54,7 +89,7 @@ func main() {
 				return err
 			}
 
-			drv, err := driver.NewDriver(nodeID, endpoint, synoOption)
+			drv, err := driver.NewDriver(nodeID, endpoint, version, synoOption)
 			if err != nil {
 				fmt.Printf("Failed to create driver: %v\n", err)
 				return err
@@ -66,7 +101,12 @@ func main() {
 		SilenceUsage: true,
 	}
 
+	rootCmd.AddCommand(versionCmd)
 	runOptions.AddFlags(rootCmd, rootCmd.PersistentFlags())
+
+	// TODO: enable this once glog has been removed and remove initKlog above
+	// klog.InitFlags(rootCmd.PersistentFlags())
+
 	pflag.CommandLine.AddGoFlagSet(flag.CommandLine)
 
 	if err := rootCmd.Execute(); err != nil {

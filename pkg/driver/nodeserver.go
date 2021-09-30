@@ -28,7 +28,6 @@ import (
 	"github.com/container-storage-interface/spec/lib/go/csi"
 	"github.com/golang/glog"
 	iscsilib "github.com/kubernetes-csi/csi-lib-iscsi/iscsi"
-	csicommon "github.com/kubernetes-csi/drivers/pkg/csi-common"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -45,7 +44,7 @@ const (
 )
 
 type nodeServer struct {
-	*csicommon.DefaultNodeServer
+	driver *driver
 
 	targetAPI iscsi.TargetAPI
 	lunAPI    iscsi.LunAPI
@@ -293,4 +292,15 @@ func (ns *nodeServer) NodeGetCapabilities(context.Context, *csi.NodeGetCapabilit
 	return &csi.NodeGetCapabilitiesResponse{
 		Capabilities: caps,
 	}, nil
+}
+
+func (ns *nodeServer) NodeGetInfo(ctx context.Context, req *csi.NodeGetInfoRequest) (*csi.NodeGetInfoResponse, error) {
+	return &csi.NodeGetInfoResponse{
+		NodeId: ns.driver.nodeID,
+	}, nil
+}
+
+// Stubs for unimplemented calls
+func (ns *nodeServer) NodeGetVolumeStats(ctx context.Context, in *csi.NodeGetVolumeStatsRequest) (*csi.NodeGetVolumeStatsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "")
 }

@@ -17,10 +17,16 @@
 package driver
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strconv"
 	"strings"
+
+	"github.com/container-storage-interface/spec/lib/go/csi"
+	"github.com/kubernetes-csi/csi-lib-utils/protosanitizer"
+	"google.golang.org/grpc"
+	"k8s.io/klog/v2"
 )
 
 func makeVolumeID(targetID int, mappingIndex int) string {
@@ -67,4 +73,42 @@ func validateCapacity(requestBytes, limitBytes int64) (int64, error) {
 		return 1, nil
 	}
 	return (requestBytes-1)>>30 + 1, nil
+}
+
+func newDefaultIdentityServer(d *driver) *identityServer {
+	return &identityServer{
+		driver: d,
+	}
+}
+
+func newControllerServiceCapability(cap csi.ControllerServiceCapability_RPC_Type) *csi.ControllerServiceCapability {
+	return &csi.ControllerServiceCapability{
+		Type: &csi.ControllerServiceCapability_Rpc{
+			Rpc: &csi.ControllerServiceCapability_RPC{
+				Type: cap,
+			},
+		},
+	}
+}
+
+func ParseEndpoint(ep string) (string, string, error) {
+	if strings.HasPrefix(strings.ToLower(ep), "unix://") || strings.HasPrefix(strings.ToLower(ep), "tcp://") {
+		s := strings.SplitN(ep, "://", 2)
+		if s[1] != "" {
+			return s[0], s[1], nil
+		}
+	}
+	return "", "", fmt.Errorf("Invalid endpoint: %v", ep)
+}
+
+func logGRPC(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+	klog.V(3).Infof("GRPC call: %s", info.FullMethod)
+	klog.V(5).Infof("GRPC request: %s", protosanitizer.StripSecrets(req))
+	resp, err := handler(ctx, req)
+	if err != nil {
+		klog.Errorf("GRPC error: %v", err)
+	} else {
+		klog.V(5).Infof("GRPC response: %s", protosanitizer.StripSecrets(resp))
+	}
+	return resp, err
 }
