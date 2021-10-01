@@ -66,8 +66,6 @@ func main() {
 		Use:  "synology-csi-plugin",
 		Long: "Synology CSI(Container Storage Interface) plugin",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			flag.CommandLine.Parse([]string{"-v", "8", "--logtostderr=1"})
-
 			endpoint := runOptions.Endpoint
 			nodeID := runOptions.NodeID
 

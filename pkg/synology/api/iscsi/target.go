@@ -17,14 +17,13 @@
 package iscsi
 
 import (
-	"errors"
+	"encoding/json"
 	"fmt"
+	"net/url"
 	"strconv"
 
-	"encoding/json"
-	"net/url"
+	"k8s.io/klog/v2"
 
-	"github.com/golang/glog"
 	"github.com/jparklab/synology-csi/pkg/synology/core"
 )
 
@@ -162,7 +161,7 @@ func (t *targetAPI) List() ([]Target, error) {
 
 	var targets []Target
 	if jsonErr := json.Unmarshal(*data["targets"], &targets); jsonErr != nil {
-		glog.Errorf("Failed to parse target list: %s(%s)", *data["targets"], jsonErr)
+		klog.Errorf("Failed to parse target list: %s(%s)", *data["targets"], jsonErr)
 		return nil, jsonErr
 	}
 
@@ -182,7 +181,7 @@ func (t *targetAPI) Get(id int) (*Target, error) {
 
 	var target Target
 	if jsonErr := json.Unmarshal(*data["target"], &target); jsonErr != nil {
-		glog.Errorf("Failed to parse target: %s(%s)", *data["target"], jsonErr)
+		klog.Errorf("Failed to parse target: %s(%s)", *data["target"], jsonErr)
 		return nil, jsonErr
 	}
 
@@ -221,11 +220,11 @@ func (t *targetAPI) Create(
 	}
 
 	targetIDStr := string(*data["target_id"])
-	fmt.Printf("Created TargetID: %s", targetIDStr)
+	klog.V(2).Infof("Created TargetID: %s", targetIDStr)
 
 	targetID, err := strconv.Atoi(targetIDStr)
 	if err != nil {
-		return nil, errors.New(fmt.Sprintf("Invalid target ID: %s", targetIDStr))
+		return nil, fmt.Errorf("Invalid target ID: %s", targetIDStr)
 	}
 
 	return t.Get(targetID)

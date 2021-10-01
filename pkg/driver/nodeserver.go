@@ -26,14 +26,12 @@ import (
 	"time"
 
 	"github.com/container-storage-interface/spec/lib/go/csi"
-	"github.com/golang/glog"
 	iscsilib "github.com/kubernetes-csi/csi-lib-iscsi/iscsi"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-
+	"k8s.io/klog/v2"
 	mu "k8s.io/mount-utils"
 	utilexec "k8s.io/utils/exec"
-	"k8s.io/utils/mount"
 
 	"github.com/jparklab/synology-csi/pkg/synology/api/iscsi"
 )
@@ -69,34 +67,48 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 	if err != nil {
 		msg := fmt.Sprintf(
 			"Unable to find target of ID: %d", targetID)
-		glog.V(3).Info(msg)
+		klog.V(1).Info(msg)
 		return nil, status.Error(codes.NotFound, msg)
 	}
 
+	if klog.V(2).Enabled() {
+		iscsilib.EnableDebugLogging(IscsiLogWriter{})
+	}
+
+	// TODO(ressu): this really should be in a separate function
+	// Generate target Info fields
+	ti := []iscsilib.TargetInfo{}
+	for _, p := range ns.iscsiPortals {
+		ti = append(ti, iscsilib.TargetInfo{Iqn: target.IQN, Portal: p})
+	}
+
 	c := iscsilib.Connector{
+		Targets:       ti,
 		TargetIqn:     target.IQN,
 		TargetPortals: ns.iscsiPortals,
-		Lun:           int32(mappingIndex),
+		// TODO(ressu): Forcing discovery seems odd, we should be good by now
+		DoDiscovery: true,
+		Lun:         int32(mappingIndex),
 	}
 
 	devicePath, err := iscsilib.Connect(c)
 	if err != nil {
 		msg := fmt.Sprintf("failed to connect to iSCSI target %s: %v", target.IQN, err)
-		glog.V(3).Info(msg)
+		klog.Error(msg)
 		return nil, status.Errorf(codes.Internal, msg)
 	}
 
-	glog.V(5).Infof("Checking mount point: %s", targetPath)
+	klog.V(1).Infof("Checking mount point: %s", targetPath)
 
 	// mount device to the target path
-	mounter := &mount.SafeFormatAndMount{
-		Interface: mount.New(""),
+	mounter := &mu.SafeFormatAndMount{
+		Interface: mu.New(""),
 		Exec:      utilexec.New(),
 	}
 
 	notMnt, err := mounter.IsLikelyNotMountPoint(targetPath)
 	if !notMnt {
-		glog.V(5).Infof("%s is already mounted", targetPath)
+		klog.V(1).Infof("%s is already mounted", targetPath)
 		return &csi.NodePublishVolumeResponse{}, nil
 	}
 
@@ -104,17 +116,17 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 		if !os.IsNotExist(err) {
 			return nil, status.Errorf(codes.Internal, "failed to check mount target: %v", err)
 		}
-		glog.V(6).Infof("Creating mount directory: %s", targetPath)
+		klog.V(1).Infof("Creating mount directory: %s", targetPath)
 		err = os.Mkdir(targetPath, 0750)
 		if err != nil {
 			return nil, status.Errorf(codes.Internal, "failed to create mount directory: %v", err)
 		}
 	}
 
-	exists, err := mount.PathExists(devicePath)
+	exists, err := mu.PathExists(devicePath)
 	if !exists || err != nil {
 		msg := fmt.Sprintf("Could not find ISCSI device: %s", devicePath)
-		glog.V(3).Info(msg)
+		klog.V(1).Info(msg)
 		return nil, status.Error(codes.Internal, msg)
 	}
 
@@ -122,7 +134,7 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 	mountFlags := req.GetVolumeCapability().GetMount().GetMountFlags()
 	options = append(options, mountFlags...)
 
-	glog.V(5).Infof(
+	klog.V(1).Infof(
 		"Mounting %s to %s(fstype: %s, options: %v)",
 		devicePath, targetPath, fsType, options)
 	err = mounter.FormatAndMount(devicePath, targetPath, fsType, options)
@@ -130,7 +142,7 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 		msg := fmt.Sprintf(
 			"Failed to mount %s to %s(fstype: %s, options: %v): %v",
 			devicePath, targetPath, fsType, options, err)
-		glog.V(5).Info(msg)
+		klog.V(1).Info(msg)
 		return nil, status.Error(codes.Internal, msg)
 	}
 
@@ -141,7 +153,7 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 	// https://github.com/kubernetes/kubernetes/issues/66323
 	//	https://github.com/kubernetes/kubernetes/pull/67280/files
 
-	glog.V(5).Infof(
+	klog.V(1).Infof(
 		"Mounted %s to %s(fstype: %s, options: %v)",
 		devicePath, targetPath, fsType, options)
 
@@ -154,6 +166,7 @@ func (ns *nodeServer) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpu
 
 	targetID, _, err := parseVolumeID(volID)
 	if err != nil {
+		klog.Errorf("failed to parse volume ID '%s': %v", volID, err)
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 
@@ -161,19 +174,19 @@ func (ns *nodeServer) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpu
 	if err != nil {
 		msg := fmt.Sprintf(
 			"Unable to find target of ID: %d", targetID)
-		glog.V(3).Info(msg)
+		klog.V(1).Info(msg)
 		return nil, status.Error(codes.NotFound, msg)
 	}
 
-	mounter := &mount.SafeFormatAndMount{
-		Interface: mount.New(""),
+	mounter := &mu.SafeFormatAndMount{
+		Interface: mu.New(""),
 		Exec:      utilexec.New(),
 	}
 
 	notMnt, err := mounter.IsLikelyNotMountPoint(targetPath)
 	if notMnt {
 		msg := fmt.Sprintf("Path %s not mounted", targetPath)
-		glog.V(3).Info(msg)
+		klog.V(1).Info(msg)
 		return nil, status.Errorf(codes.NotFound, msg)
 	}
 	if err != nil {
@@ -182,8 +195,12 @@ func (ns *nodeServer) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpu
 
 	if err = mounter.Unmount(targetPath); err != nil {
 		msg := fmt.Sprintf("Failed to unmount %s: %v", targetPath, err)
-		glog.V(3).Info(msg)
+		klog.V(1).Info(msg)
 		return nil, status.Errorf(codes.Internal, msg)
+	}
+
+	if err = os.Remove(targetPath); err != nil {
+		klog.Warning("failed to remove directory %s: %v", targetPath)
 	}
 
 	// logout target
@@ -192,7 +209,7 @@ func (ns *nodeServer) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpu
 	if err = iscsilib.Disconnect(target.IQN, ns.iscsiPortals); err != nil {
 		msg := fmt.Sprintf(
 			"Failed to logout(iqn: %s): %v", target.IQN, err)
-		glog.V(3).Info(msg)
+		klog.V(1).Info(msg)
 		return nil, status.Errorf(codes.Internal, msg)
 	}
 
@@ -213,37 +230,33 @@ func (ns *nodeServer) NodeUnstageVolume(ctx context.Context, req *csi.NodeUnstag
 func (ns *nodeServer) NodeExpandVolume(ctx context.Context, req *csi.NodeExpandVolumeRequest) (*csi.NodeExpandVolumeResponse, error) {
 	volID := req.GetVolumeId()
 	if volID == "" {
-		msg := fmt.Sprintf("Cannot find volume id")
-		glog.V(3).Info(msg)
-		return nil, status.Error(codes.FailedPrecondition, msg)
+		msg := fmt.Sprintf("volume id must be defined")
+		klog.V(1).Info(msg)
+		return nil, status.Error(codes.InvalidArgument, msg)
 	}
 
 	volumePath := req.GetVolumePath()
 	if volumePath == "" {
-		msg := fmt.Sprintf("Cannot find volume path")
-		glog.V(3).Info(msg)
-		return nil, status.Error(codes.FailedPrecondition, msg)
+		msg := fmt.Sprintf("volume path must be defined")
+		klog.V(1).Info(msg)
+		return nil, status.Error(codes.InvalidArgument, msg)
 	}
 
-	fsType := req.GetVolumeCapability().GetMount().GetFsType()
-	if fsType == "" {
-		msg := fmt.Sprintf("Cannot detect filesystem type")
-		glog.V(3).Info(msg)
-		return nil, status.Error(codes.FailedPrecondition, msg)
-	}
-
-	mounter := &mount.SafeFormatAndMount{
-		Interface: mount.New(""),
+	mounter := &mu.SafeFormatAndMount{
+		Interface: mu.New(""),
 		Exec:      utilexec.New(),
 	}
 
-	// ex) devicePath = /dev/sdX
-	args := []string{"-o", "source", "--noheadings", "--target", volumePath}
-	output, err := mounter.Exec.Command("findmnt", args...).CombinedOutput()
+	devicePath, _, err := mu.GetDeviceNameFromMount(mounter, volumePath)
 	if err != nil {
+		klog.Errorf("cannot detect device path for volume %s: %v", volumePath, err)
 		return nil, status.Errorf(codes.Internal, "Cannot detect device path for volume %s: %v", volumePath, err)
 	}
-	devicePath := strings.TrimSpace(string(output))
+
+	if devicePath == "" {
+		klog.Errorf("no volume found for path: %s", volumePath)
+		return nil, status.Errorf(codes.NotFound, "no volume found: %s", volumePath)
+	}
 
 	// ex) /sys/block/sdX/device/rescan is rescan device path
 	blockDeviceRescanPath := ""
@@ -252,7 +265,8 @@ func (ns *nodeServer) NodeExpandVolume(ctx context.Context, req *csi.NodeExpandV
 		d := filepath.Join("/sys/block", parts[2], "device", "rescan")
 		blockDeviceRescanPath, err = filepath.EvalSymlinks(d)
 		if err != nil {
-			return nil, status.Error(codes.Internal, "")
+			klog.Errorf("failed to detect device rescan path with %s: %v", d, err)
+			return nil, status.Error(codes.Internal, "failed to rescan device")
 		}
 	} else {
 		msg := fmt.Sprintf("device path %s is invalid format", devicePath)
@@ -261,12 +275,15 @@ func (ns *nodeServer) NodeExpandVolume(ctx context.Context, req *csi.NodeExpandV
 	// write data for triggering to rescan
 	err = ioutil.WriteFile(blockDeviceRescanPath, []byte{'1'}, 0666)
 	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+		klog.Errorf("unable to trigger device rescan: %v", err)
+		return nil, status.Error(codes.Internal, "failed to rescan device")
 	}
 
 	// resize file system
 	r := mu.NewResizeFs(utilexec.New())
 	if _, err := r.Resize(devicePath, volumePath); err != nil {
+		// TODO: this error doesn't make sense, rephrase
+		klog.Errorf("could not resize volume %s to %s: %v", devicePath, volumePath, err)
 		return nil, status.Errorf(codes.Internal, "Could not resize volume %s to %s: %s", devicePath, volumePath, err.Error())
 	}
 

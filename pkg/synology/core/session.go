@@ -30,9 +30,9 @@ import (
 	"net/url"
 
 	retry "github.com/avast/retry-go"
-	"github.com/golang/glog"
 	"github.com/google/go-querystring/query"
 	"github.com/jparklab/synology-csi/pkg/synology/options"
+	"k8s.io/klog/v2"
 )
 
 func errorToDesc(code int) string {
@@ -161,7 +161,7 @@ func (s *session) prepareArguments() (url.Values, error) {
 func (s *session) login() (string, error) {
 	v, err := s.prepareArguments()
 	if err != nil {
-		glog.Errorf("Failed parsing URL parameters: %v", err)
+		klog.Errorf("Failed parsing URL parameters: %v", err)
 		return "", err
 	}
 
@@ -197,7 +197,7 @@ func (s *session) login() (string, error) {
 
 	err = retry.Do(
 		func() error {
-			glog.Infof("Logging in via %s", uri)
+			klog.Infof("Logging in via %s", uri)
 
 			var reader io.Reader
 			if requestBody != nil {
@@ -205,7 +205,7 @@ func (s *session) login() (string, error) {
 			}
 			req, err := http.NewRequest(method, uri, reader)
 			if err != nil {
-				glog.Errorf("Failed making a %s request: %v", method, err)
+				klog.Errorf("Failed making a %s request: %v", method, err)
 				return err
 			}
 
@@ -217,25 +217,25 @@ func (s *session) login() (string, error) {
 
 			resp, err := client.Do(req)
 			if err != nil {
-				glog.Errorf("Failed logging in: %v", err)
+				klog.Errorf("Failed logging in: %v", err)
 				return err
 			}
 
 			defer func() {
 				if err := resp.Body.Close(); err != nil {
-					glog.Errorf("Failed closing the body: %v", err)
+					klog.Errorf("Failed closing the body: %v", err)
 				}
 			}()
 
 			body, err = ioutil.ReadAll(resp.Body)
 			if err != nil {
-				glog.Errorf("Failed parsing response data : %v", err)
+				klog.Errorf("Failed parsing response data : %v", err)
 				return err
 			}
 
 			authResp = responseData{}
 			if err = json.Unmarshal(body, &authResp); err != nil {
-				glog.Errorf("Failed to parse login response: %s(%v)", body, err)
+				klog.Errorf("Failed to parse login response: %s(%v)", body, err)
 				return err
 			}
 
@@ -244,7 +244,7 @@ func (s *session) login() (string, error) {
 				msg := fmt.Sprintf(
 					"Failed to login: %d %s: %s",
 					code, loginErrorToDesc(code), body)
-				glog.Errorf(msg)
+				klog.Errorf(msg)
 				// do not retry for authentication failure
 				// to avoid locking the account due to misconfiguration
 				// (e.g. wrong password)
@@ -262,7 +262,7 @@ func (s *session) login() (string, error) {
 	}
 
 	if err = json.Unmarshal(*authResp.Data["sid"], &s.sid); err != nil {
-		glog.Errorf("Failed to parse auth authResp.Data.sid: %s(%v)", authResp.String(), err)
+		klog.Errorf("Failed to parse auth authResp.Data.sid: %s(%v)", authResp.String(), err)
 		return "", err
 	}
 
@@ -285,18 +285,18 @@ func (s *session) login() (string, error) {
 	body, err = ioutil.ReadAll(secResp.Body)
 	defer func() {
 		if err := secResp.Body.Close(); err != nil {
-			glog.Errorf("Failed closing the body: %v", err)
+			klog.Errorf("Failed closing the body: %v", err)
 		}
 	}()
 
 	securityRespData := securityResponseData{}
 	if err = json.Unmarshal(body, &securityRespData); err != nil {
-		glog.Errorf("Failed to parse auth response: %s(%v)", body, err)
+		klog.Errorf("Failed to parse auth response: %s(%v)", body, err)
 		return "", err
 	}
 
 	if !securityRespData.Success {
-		glog.Errorf("Failed to query security config, set timeout to 0: (code: %d)", securityRespData.Error.Code)
+		klog.Errorf("Failed to query security config, set timeout to 0: (code: %d)", securityRespData.Error.Code)
 		s.timeoutMinute = 0
 	} else {
 		s.timeoutMinute = securityRespData.Data.Timeout
@@ -305,7 +305,7 @@ func (s *session) login() (string, error) {
 	now := time.Now()
 	s.lastLoginTime = &now
 
-	glog.Infof("Logged in. Timeout minute: %d", s.timeoutMinute)
+	klog.Infof("Logged in. Timeout minute: %d", s.timeoutMinute)
 
 	return s.sid, nil
 }
@@ -354,7 +354,7 @@ func (s *session) Get(path string, params url.Values) (*http.Response, error) {
 	urlObj, _ := url.Parse(fmt.Sprintf("%s/%s", s.baseURL, path))
 	urlObj.RawQuery = params.Encode()
 
-	glog.V(8).Infof("Querying %s\n", urlObj.String())
+	klog.V(2).Infof("Querying %s\n", urlObj.String())
 
 	return http.Get(urlObj.String())
 }
@@ -366,7 +366,7 @@ func (s *session) Post(path string, data url.Values) (*http.Response, error) {
 
 	targetURL := fmt.Sprintf("%s/%s", s.baseURL, path)
 
-	glog.V(8).Infof("Postting %s: %#v\n", targetURL, data)
+	klog.V(2).Infof("Posting %s: %#v\n", targetURL, data)
 	return http.PostForm(targetURL, data)
 }
 
@@ -412,7 +412,7 @@ func (e *apiEntry) Get(method string, params url.Values) (map[string]*json.RawMe
 
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
-			glog.Errorf("Failed closing the body: %v", err)
+			klog.Errorf("Failed closing the body: %v", err)
 		}
 	}()
 
@@ -423,7 +423,7 @@ func (e *apiEntry) Get(method string, params url.Values) (map[string]*json.RawMe
 
 	var data responseData
 	if jsonErr := json.Unmarshal(body, &data); jsonErr != nil {
-		glog.V(3).Infof("Failed to parse response: %s", body)
+		klog.V(1).Infof("Failed to parse response: %s", body)
 		return nil, jsonErr
 	}
 
@@ -452,7 +452,7 @@ func (e *apiEntry) Post(method string, params url.Values) (map[string]*json.RawM
 
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
-			glog.Errorf("Failed closing the body: %v", err)
+			klog.Errorf("Failed closing the body: %v", err)
 		}
 	}()
 
@@ -463,7 +463,7 @@ func (e *apiEntry) Post(method string, params url.Values) (map[string]*json.RawM
 
 	var data responseData
 	if jsonErr := json.Unmarshal(body, &data); jsonErr != nil {
-		glog.V(3).Infof("Failed to parse: %s", body)
+		klog.Errorf("Failed to parse: %s", body)
 		return nil, jsonErr
 	}
 

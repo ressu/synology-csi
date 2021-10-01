@@ -312,10 +312,8 @@ func (cs *controllerServer) DeleteVolume(ctx context.Context, req *csi.DeleteVol
 
 	target, err := cs.targetAPI.Get(targetID)
 	if err != nil {
-		msg := fmt.Sprintf(
-			"Unable to find target of ID(%d): %v", targetID, err)
-		glog.V(3).Info(msg)
-		return nil, status.Error(codes.NotFound, msg)
+		klog.Warningf("target for ID(%d) not found: %v", targetID, err)
+		return &csi.DeleteVolumeResponse{}, nil
 	}
 
 	if len(target.MappedLuns) < mappingIndex {

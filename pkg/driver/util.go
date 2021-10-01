@@ -102,13 +102,30 @@ func ParseEndpoint(ep string) (string, string, error) {
 }
 
 func logGRPC(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
-	klog.V(3).Infof("GRPC call: %s", info.FullMethod)
-	klog.V(5).Infof("GRPC request: %s", protosanitizer.StripSecrets(req))
+	klog.V(1).Infof("GRPC call: %s", info.FullMethod)
+	klog.V(2).Infof("GRPC request: %s", protosanitizer.StripSecrets(req))
 	resp, err := handler(ctx, req)
 	if err != nil {
 		klog.Errorf("GRPC error: %v", err)
 	} else {
-		klog.V(5).Infof("GRPC response: %s", protosanitizer.StripSecrets(resp))
+		klog.V(2).Infof("GRPC response: %s", protosanitizer.StripSecrets(resp))
 	}
 	return resp, err
+}
+
+// IscsiLogWriter is an iscsi-lib compatible logging writer
+//
+// Usage:
+//   if klog.V(2).Enabled() {
+//     iscsi.EnableDebugLogging(IscsiLogWriter{})
+//   }
+type IscsiLogWriter struct{}
+
+func (w IscsiLogWriter) Write(b []byte) (int, error) {
+	if len(b) == 0 {
+		return 0, nil
+	}
+
+	klog.InfoDepth(3, string(b))
+	return 0, nil
 }

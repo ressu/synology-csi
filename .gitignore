@@ -1,9 +1,7 @@
-*.swp
-*.swo
-.idea/
-.vscode/
-bin/
+# Ignore vendored libraries
 vendors/
 
+# Various locations with binaries
 dist/
 /synology-csi-driver
+cmd/syno-csi-plugin/syno-csi-plugin
