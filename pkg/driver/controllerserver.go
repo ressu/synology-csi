@@ -23,8 +23,6 @@ import (
 	"strings"
 
 	"github.com/container-storage-interface/spec/lib/go/csi"
-	"github.com/golang/glog"
-	"github.com/pborman/uuid"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"k8s.io/klog/v2"
@@ -63,13 +61,13 @@ func (cs *controllerServer) ControllerExpandVolume(ctx context.Context, req *csi
 	target, err := cs.targetAPI.Get(targetID)
 	if err != nil {
 		msg := fmt.Sprintf("Unable to find target of ID(%d): %v", targetID, err)
-		glog.V(3).Info(msg)
+		klog.Warning(msg)
 		return nil, status.Error(codes.NotFound, msg)
 	}
 
 	if len(target.MappedLuns) < mappingIndex {
 		msg := fmt.Sprintf("Target %s(%d) does not have mapping for index %d", target.Name, target.TargetID, mappingIndex)
-		glog.V(3).Info(msg)
+		klog.Error(msg)
 		return nil, status.Error(codes.FailedPrecondition, msg)
 	}
 
@@ -111,7 +109,7 @@ func (cs *controllerServer) ControllerExpandVolume(ctx context.Context, req *csi
 	if err != nil {
 		msg := fmt.Sprintf(
 			"Unable to update volume: %s", lun.Name)
-		glog.V(3).Info(msg)
+		klog.Error(msg)
 		return nil, status.Error(codes.Internal, msg)
 	}
 
@@ -126,7 +124,43 @@ func (cs *controllerServer) CreateVolume(ctx context.Context, req *csi.CreateVol
 	// Volume name
 	volName := req.GetName()
 	if len(volName) == 0 {
-		volName = uuid.NewUUID().String()
+		return nil, status.Error(codes.InvalidArgument, "Name is required")
+	}
+
+	caps := req.GetVolumeCapabilities()
+	if caps == nil {
+		return nil, status.Error(codes.InvalidArgument, "Volume Capabilities are required")
+	}
+
+	// Keep a record of the requested access types.
+	var accessTypeMount, accessTypeBlock bool
+	var accessMode csi.VolumeCapability_AccessMode_Mode
+
+	for _, cap := range caps {
+		if cap.GetBlock() != nil {
+			accessTypeBlock = true
+		}
+		if cap.GetMount() != nil {
+			accessTypeMount = true
+		}
+		if cap.GetAccessMode() != nil {
+			accessMode = cap.GetAccessMode().GetMode()
+		}
+	}
+
+	if accessTypeBlock || !accessTypeMount {
+		return nil, status.Errorf(codes.InvalidArgument, "Only Mount access is supported")
+	}
+
+	// Validate Access Mode
+	switch accessMode {
+	case csi.VolumeCapability_AccessMode_SINGLE_NODE_READER_ONLY:
+	case csi.VolumeCapability_AccessMode_SINGLE_NODE_WRITER:
+	default:
+		return nil, status.Errorf(
+			codes.InvalidArgument,
+			"Unsupported access mode: %s", csi.VolumeCapability_AccessMode_Mode_name[int32(accessMode)],
+		)
 	}
 
 	// Volume size
@@ -164,7 +198,7 @@ func (cs *controllerServer) CreateVolume(ctx context.Context, req *csi.CreateVol
 			fmt.Sprintf("Unable to find location %s, valid locations: %v", location, locations))
 	}
 
-	glog.V(5).Infof("Found the volume for the location %s: %v", location, volume)
+	klog.V(1).Infof("Found the volume for the location %s: %v", location, volume)
 
 	volType, present := params["type"]
 	if !present {
@@ -194,16 +228,14 @@ func (cs *controllerServer) CreateVolume(ctx context.Context, req *csi.CreateVol
 			msg := fmt.Sprintf(
 				"Failed to create a LUN(name: %s, location: %s, size: %d, type: %s): %v",
 				lunName, location, volSizeByte, volType, err)
-			glog.V(3).Info(msg)
+			klog.Error(msg)
 			return nil, status.Error(codes.Internal, msg)
 		}
 
-		glog.V(5).Infof("LUN %s(%s) created", lunName, newLun.UUID)
+		klog.V(1).Infof("LUN %s(%s) created", lunName, newLun.UUID)
 		lun = newLun
 	} else {
-		msg := fmt.Sprintf(
-			"Volume %s already exists, found LUN %s. Will use existing LUN", volName, lunName)
-		glog.V(3).Info(msg)
+		klog.V(1).Infof("Volume %s already exists, found LUN %s. Will use existing LUN", volName, lunName)
 	}
 
 	var target *iscsi.Target
@@ -212,7 +244,7 @@ func (cs *controllerServer) CreateVolume(ctx context.Context, req *csi.CreateVol
 		targets, err := cs.targetAPI.List()
 		if err != nil {
 			msg := fmt.Sprintf("Failed get list of targets: %v", err)
-			glog.V(3).Info(msg)
+			klog.Error(msg)
 			return nil, status.Error(codes.Internal, msg)
 		}
 
@@ -233,7 +265,7 @@ func (cs *controllerServer) CreateVolume(ctx context.Context, req *csi.CreateVol
 
 		if target == nil {
 			msg := fmt.Sprintf("Failed to find target mapped to LUN %s", lunName)
-			glog.V(3).Info(msg)
+			klog.Error(msg)
 			return nil, status.Error(codes.Internal, msg)
 		}
 
@@ -244,7 +276,7 @@ func (cs *controllerServer) CreateVolume(ctx context.Context, req *csi.CreateVol
 		if present {
 			password, present := secrets["password"]
 			if !present {
-				glog.V(3).Info("Password is required to provide chap authentication")
+				klog.Warning("Password is required to provide chap authentication")
 				return nil, status.Error(codes.InvalidArgument, "Password is missing")
 			}
 			target, err = cs.targetAPI.Create(
@@ -266,11 +298,11 @@ func (cs *controllerServer) CreateVolume(ctx context.Context, req *csi.CreateVol
 			msg := fmt.Sprintf(
 				"Failed to create target(name: %s, iqn: %s): %v",
 				targetName, targetIQN, err)
-			glog.V(3).Info(msg)
+			klog.Error(msg)
 			return nil, status.Error(codes.Internal, msg)
 		}
 
-		glog.V(5).Infof("Target %s(ID: %d) created", targetName, target.TargetID)
+		klog.V(1).Infof("Target %s(ID: %d) created", targetName, target.TargetID)
 
 		// map lun
 		err = cs.targetAPI.MapLun(
@@ -279,11 +311,11 @@ func (cs *controllerServer) CreateVolume(ctx context.Context, req *csi.CreateVol
 			msg := fmt.Sprintf(
 				"Failed to map LUN %s(%s) to target %s(%d): %v",
 				lun.Name, lun.UUID, target.Name, target.TargetID, err)
-			glog.V(5).Info(msg)
+			klog.Error(msg)
 			return nil, status.Error(codes.Internal, msg)
 		}
 
-		glog.V(5).Infof("Mapped LUN %s(%s) to target %s(ID: %d)",
+		klog.V(1).Infof("Mapped LUN %s(%s) to target %s(ID: %d)",
 			lun.Name, lun.UUID, target.Name, target.TargetID)
 
 	}
@@ -305,9 +337,14 @@ func (cs *controllerServer) CreateVolume(ctx context.Context, req *csi.CreateVol
 func (cs *controllerServer) DeleteVolume(ctx context.Context, req *csi.DeleteVolumeRequest) (*csi.DeleteVolumeResponse, error) {
 
 	volID := req.GetVolumeId()
+	if volID == "" {
+		return nil, status.Error(codes.InvalidArgument, "Volume ID is required")
+	}
+
 	targetID, mappingIndex, err := parseVolumeID(volID)
 	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, err.Error())
+		klog.Warningf("invalid volumeid '%s' in DeleteVolume: %v", volID, err)
+		return &csi.DeleteVolumeResponse{}, nil
 	}
 
 	target, err := cs.targetAPI.Get(targetID)
@@ -319,7 +356,7 @@ func (cs *controllerServer) DeleteVolume(ctx context.Context, req *csi.DeleteVol
 	if len(target.MappedLuns) < mappingIndex {
 		msg := fmt.Sprintf("Target %s(%d) does not have mapping for index %d",
 			target.Name, target.TargetID, mappingIndex)
-		glog.V(3).Info(msg)
+		klog.Error(msg)
 		return nil, status.Error(codes.FailedPrecondition, msg)
 	}
 
@@ -329,7 +366,7 @@ func (cs *controllerServer) DeleteVolume(ctx context.Context, req *csi.DeleteVol
 		msg := fmt.Sprintf(
 			"Unable to find LUN of UUID: %s(mapped to target %s(%d))",
 			mapping.LunUUID, target.Name, target.TargetID)
-		glog.V(3).Info(msg)
+		klog.Error(msg)
 		return nil, status.Error(codes.NotFound, msg)
 	}
 
@@ -339,11 +376,11 @@ func (cs *controllerServer) DeleteVolume(ctx context.Context, req *csi.DeleteVol
 		msg := fmt.Sprintf(
 			"Failed to unmap LUN %s(%s) to target %s(%d): %v",
 			lun.Name, lun.UUID, target.Name, target.TargetID, err)
-		glog.V(3).Info(msg)
+		klog.Error(msg)
 		return nil, status.Error(codes.Internal, msg)
 	}
 
-	glog.V(5).Infof("Unmapped LUN %s(%s) to target %s(ID: %d)",
+	klog.V(1).Infof("Unmapped LUN %s(%s) to target %s(ID: %d)",
 		lun.Name, lun.UUID, target.Name, target.TargetID)
 
 	// delete target
@@ -352,10 +389,10 @@ func (cs *controllerServer) DeleteVolume(ctx context.Context, req *csi.DeleteVol
 		msg := fmt.Sprintf(
 			"Failed to delete target %s(%d): %v",
 			target.Name, target.TargetID, err)
-		glog.V(3).Info(msg)
+		klog.Error(msg)
 		return nil, status.Error(codes.Internal, msg)
 	}
-	glog.V(5).Infof("Deleted target %s(%d)",
+	klog.V(1).Infof("Deleted target %s(%d)",
 		target.Name, target.TargetID)
 
 	// delete lun
@@ -364,20 +401,77 @@ func (cs *controllerServer) DeleteVolume(ctx context.Context, req *csi.DeleteVol
 		msg := fmt.Sprintf(
 			"Failed to delete lun %s(%s): %v",
 			lun.Name, lun.UUID, err)
-		glog.V(3).Info(msg)
+		klog.Error(msg)
 		return nil, status.Error(codes.Internal, msg)
 	}
-	glog.V(5).Infof("Deleted lun %s(%s)",
+	klog.V(1).Infof("Deleted lun %s(%s)",
 		lun.Name, lun.UUID)
 
 	return &csi.DeleteVolumeResponse{}, nil
 }
 
+func (cs *controllerServer) ValidateVolumeCapabilities(ctx context.Context, req *csi.ValidateVolumeCapabilitiesRequest) (*csi.ValidateVolumeCapabilitiesResponse, error) {
+	// TODO(ressu): A LOT of this can be deduplicated with CreateVolume
+	if req.GetVolumeId() == "" {
+		return nil, status.Error(codes.InvalidArgument, "Volume ID is required")
+	}
+
+	caps := req.GetVolumeCapabilities()
+	if caps == nil {
+		return nil, status.Error(codes.InvalidArgument, "Volume Capabilities are required")
+	}
+
+	// Keep a record of the requested access types.
+	var accessTypeMount, accessTypeBlock bool
+	var accessMode csi.VolumeCapability_AccessMode_Mode
+
+	for _, cap := range caps {
+		if cap.GetBlock() != nil {
+			accessTypeBlock = true
+		}
+		if cap.GetMount() != nil {
+			accessTypeMount = true
+		}
+		if cap.GetAccessMode() != nil {
+			accessMode = cap.GetAccessMode().GetMode()
+		}
+	}
+
+	if accessTypeBlock || !accessTypeMount {
+		return nil, status.Errorf(codes.InvalidArgument, "Only Mount access is supported")
+	}
+
+	// Validate Access Mode
+	switch accessMode {
+	case csi.VolumeCapability_AccessMode_SINGLE_NODE_READER_ONLY:
+	case csi.VolumeCapability_AccessMode_SINGLE_NODE_WRITER:
+	default:
+		return nil, status.Errorf(
+			codes.InvalidArgument,
+			"Unsupported access mode: %s", csi.VolumeCapability_AccessMode_Mode_name[int32(accessMode)],
+		)
+	}
+
+	return &csi.ValidateVolumeCapabilitiesResponse{
+		Confirmed: &csi.ValidateVolumeCapabilitiesResponse_Confirmed{
+			VolumeContext:      req.GetVolumeContext(),
+			VolumeCapabilities: req.GetVolumeCapabilities(),
+			Parameters:         req.GetParameters(),
+		},
+	}, nil
+}
+
 func (cs *controllerServer) ListVolumes(ctx context.Context, req *csi.ListVolumesRequest) (*csi.ListVolumesResponse, error) {
+	// TODO(ressu): this is a total cop out fix pagination
+	// If we receive a pagination token, fail immediately
+	if req.GetStartingToken() != "" {
+		return nil, status.Error(codes.Aborted, "Invalid starting token")
+	}
+
 	targets, err := cs.targetAPI.List()
 	if err != nil {
 		msg := fmt.Sprintf("Failed to list targets: %v", err)
-		glog.V(3).Info(msg)
+		klog.Error(msg)
 		return nil, status.Error(codes.Internal, msg)
 	}
 
@@ -394,7 +488,7 @@ func (cs *controllerServer) ListVolumes(ctx context.Context, req *csi.ListVolume
 			lun, err := cs.lunAPI.Get(mapping.LunUUID)
 			if err != nil {
 				msg := fmt.Sprintf("Failed to get LUN(%s): %v", mapping.LunUUID, err)
-				glog.V(3).Info(msg)
+				klog.Error(msg)
 				return nil, status.Error(codes.Internal, msg)
 
 			}
@@ -424,27 +518,36 @@ func (cs *controllerServer) ListVolumes(ctx context.Context, req *csi.ListVolume
 }
 
 func (cs *controllerServer) ControllerGetCapabilities(ctx context.Context, req *csi.ControllerGetCapabilitiesRequest) (*csi.ControllerGetCapabilitiesResponse, error) {
-	klog.V(5).Infof("Using default ControllerGetCapabilities")
-
 	return &csi.ControllerGetCapabilitiesResponse{
 		Capabilities: cs.driver.cscap,
 	}, nil
 }
 
-// No-op calls
 func (cs *controllerServer) ControllerPublishVolume(ctx context.Context, req *csi.ControllerPublishVolumeRequest) (*csi.ControllerPublishVolumeResponse, error) {
+	// TODO(ressu): most of NAS interactions from the node should be moved here instead
+	if req.GetVolumeId() == "" {
+		return nil, status.Error(codes.InvalidArgument, "Name is required")
+	}
+
+	if req.GetNodeId() == "" {
+		return nil, status.Error(codes.InvalidArgument, "Node ID is required")
+	}
+
+	if req.GetVolumeCapability() == nil {
+		return nil, status.Error(codes.InvalidArgument, "Volume Capabilites are required")
+	}
 	return &csi.ControllerPublishVolumeResponse{}, nil
 }
 
 func (cs *controllerServer) ControllerUnpublishVolume(ctx context.Context, req *csi.ControllerUnpublishVolumeRequest) (*csi.ControllerUnpublishVolumeResponse, error) {
+	if req.GetVolumeId() == "" {
+		return nil, status.Error(codes.InvalidArgument, "Volume ID is required")
+	}
+
 	return &csi.ControllerUnpublishVolumeResponse{}, nil
 }
 
 // Stubs for unused calls
-func (cs *controllerServer) ValidateVolumeCapabilities(ctx context.Context, req *csi.ValidateVolumeCapabilitiesRequest) (*csi.ValidateVolumeCapabilitiesResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "")
-}
-
 func (cs *controllerServer) GetCapacity(ctx context.Context, req *csi.GetCapacityRequest) (*csi.GetCapacityResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "")
 }
