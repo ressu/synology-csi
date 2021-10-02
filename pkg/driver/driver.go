@@ -20,7 +20,6 @@ import (
 	"fmt"
 
 	"github.com/container-storage-interface/spec/lib/go/csi"
-	"github.com/golang/glog"
 	"k8s.io/klog/v2"
 
 	"github.com/jparklab/synology-csi/pkg/synology/api/iscsi"
@@ -63,7 +62,7 @@ func Login(synoOption *options.SynologyOptions) (*core.Session, string, error) {
 		"%s://%s:%d/webapi", proto,
 		synoOption.Host, synoOption.Port)
 
-	glog.V(1).Infof("Use Synology: %s", synoAPIUrl)
+	klog.V(1).Infof("Use Synology: %s", synoAPIUrl)
 
 	session := core.NewSession(synoAPIUrl, synoOption.SessionName)
 	loginResult, err := session.Login(synoOption)
@@ -77,7 +76,7 @@ func NewDriver(nodeID, endpoint, version string, synoOption *options.SynologyOpt
 
 	session, _, err := Login(synoOption)
 	if err != nil {
-		glog.V(3).Infof("Failed to login: %v", err)
+		klog.Errorf("Failed to login: %v", err)
 		return nil, err
 	}
 

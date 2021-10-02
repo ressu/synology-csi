@@ -22,12 +22,10 @@ import (
 	"os"
 	"strings"
 
-	"gopkg.in/yaml.v2"
-
-	"github.com/golang/glog"
-
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+	"gopkg.in/yaml.v2"
+	"k8s.io/klog/v2"
 
 	"github.com/jparklab/synology-csi/pkg/driver"
 	"github.com/jparklab/synology-csi/pkg/synology/options"
@@ -53,14 +51,14 @@ func NewRunOptions() *RunOptions {
 func ReadConfig(path string) (*options.SynologyOptions, error) {
 	f, err := ioutil.ReadFile(path)
 	if err != nil {
-		glog.V(1).Infof("Unable to open config file: %v", err)
+		klog.Errorf("Unable to open config file: %v", err)
 		return nil, err
 	}
 
 	conf := options.NewSynologyOptions()
 	err = yaml.Unmarshal(f, &conf)
 	if err != nil {
-		glog.V(1).Infof("Failed to parse config: %v", err)
+		klog.Errorf("Failed to parse config: %v", err)
 		return nil, err
 	}
 
@@ -89,7 +87,7 @@ func ReadConfig(path string) (*options.SynologyOptions, error) {
 			deviceID := os.Getenv("DEVICE_ID")
 			conf.DeviceId = &deviceID
 			if deviceID != "" {
-				glog.V(1).Infof("Using DEVICE_ID from environment variables: %v", deviceID)
+				klog.V(1).Infof("Using DEVICE_ID from environment variables: %v", deviceID)
 			}
 		}
 		if conf.EnableDeviceToken != nil {
@@ -114,7 +112,7 @@ func ReadConfig(path string) (*options.SynologyOptions, error) {
 	}
 
 	if conf.LoginHttpMethod != "GET" && conf.LoginHttpMethod != "POST" {
-		glog.V(1).Infof("Invalid login method in config: %v", conf.LoginHttpMethod)
+		klog.Errorf("Invalid login method in config: %v", conf.LoginHttpMethod)
 		return nil, fmt.Errorf("Invalid login method in config: %v", conf.LoginHttpMethod)
 	}
 

@@ -35,22 +35,6 @@ var (
 	date    = "unknown"
 )
 
-// initKlog is a workaround to initialize klog while glog is still being used
-// TODO: remove the below workaround with this once glog is gone
-func initKlog() {
-	klogFlags := flag.NewFlagSet("klog", flag.ExitOnError)
-	klog.InitFlags(klogFlags)
-
-	// Sync the glog and klog flags.
-	flag.CommandLine.VisitAll(func(f1 *flag.Flag) {
-		f2 := klogFlags.Lookup(f1.Name)
-		if f2 != nil {
-			value := f1.Value.String()
-			f2.Value.Set(value)
-		}
-	})
-}
-
 var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Print version information",
@@ -59,51 +43,49 @@ var versionCmd = &cobra.Command{
 	},
 }
 
+var runOptions = options.NewRunOptions()
+
+var rootCmd = &cobra.Command{
+	Use:  "synology-csi-plugin",
+	Long: "Synology CSI(Container Storage Interface) plugin",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		endpoint := runOptions.Endpoint
+		nodeID := runOptions.NodeID
+
+		klog.V(1).Infof("Synology CSI plugin version %s starting.", version)
+
+		synoOption, err := options.ReadConfig(runOptions.SynologyConf)
+		if err != nil {
+			fmt.Printf("Failed to read config: %v\n", err)
+			return err
+		}
+
+		if runOptions.CheckLogin {
+			_, _, err := driver.Login(synoOption)
+			if err != nil {
+				fmt.Printf("Failed to login: %v\n", err)
+			}
+			return err
+		}
+
+		drv, err := driver.NewDriver(nodeID, endpoint, version, synoOption)
+		if err != nil {
+			fmt.Printf("Failed to create driver: %v\n", err)
+			return err
+		}
+		drv.Run()
+
+		return nil
+	},
+	SilenceUsage: true,
+}
+
 func main() {
-	runOptions := options.NewRunOptions()
-
-	rootCmd := &cobra.Command{
-		Use:  "synology-csi-plugin",
-		Long: "Synology CSI(Container Storage Interface) plugin",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			endpoint := runOptions.Endpoint
-			nodeID := runOptions.NodeID
-
-			initKlog()
-
-			klog.V(1).Infof("Synology CSI plugin version %s starting.", version)
-
-			synoOption, err := options.ReadConfig(runOptions.SynologyConf)
-			if err != nil {
-				fmt.Printf("Failed to read config: %v\n", err)
-				return err
-			}
-
-			if runOptions.CheckLogin {
-				_, _, err := driver.Login(synoOption)
-				if err != nil {
-					fmt.Printf("Failed to login: %v\n", err)
-				}
-				return err
-			}
-
-			drv, err := driver.NewDriver(nodeID, endpoint, version, synoOption)
-			if err != nil {
-				fmt.Printf("Failed to create driver: %v\n", err)
-				return err
-			}
-			drv.Run()
-
-			return nil
-		},
-		SilenceUsage: true,
-	}
 
 	rootCmd.AddCommand(versionCmd)
 	runOptions.AddFlags(rootCmd, rootCmd.PersistentFlags())
 
-	// TODO: enable this once glog has been removed and remove initKlog above
-	// klog.InitFlags(rootCmd.PersistentFlags())
+	klog.InitFlags(nil)
 
 	pflag.CommandLine.AddGoFlagSet(flag.CommandLine)
 

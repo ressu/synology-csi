@@ -18,9 +18,11 @@ package storage
 
 import (
 	"encoding/json"
-	"github.com/golang/glog"
-	"github.com/jparklab/synology-csi/pkg/synology/core"
 	"net/url"
+
+	"k8s.io/klog/v2"
+
+	"github.com/jparklab/synology-csi/pkg/synology/core"
 )
 
 const (
@@ -98,7 +100,7 @@ func (v *volumeAPI) List() ([]Volume, error) {
 
 	var volumes []Volume
 	if jsonErr := json.Unmarshal(*data["volumes"], &volumes); jsonErr != nil {
-		glog.Errorf("Failed to parse volume list: %s(%s)", *data["volumes"], jsonErr)
+		klog.Errorf("Failed to parse volume list: %s(%s)", *data["volumes"], jsonErr)
 		return nil, jsonErr
 	}
 
@@ -116,7 +118,7 @@ func (v *volumeAPI) Get(volumePath string) (*Volume, error) {
 
 	var volume Volume
 	if jsonErr := json.Unmarshal(*data["volume"], &volume); jsonErr != nil {
-		glog.Errorf("Failed to parse volume: %s(%s)", *data["volume"], jsonErr)
+		klog.Errorf("Failed to parse volume: %s(%s)", *data["volume"], jsonErr)
 		return nil, jsonErr
 	}
 

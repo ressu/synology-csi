@@ -17,13 +17,12 @@
 package iscsi
 
 import (
+	"encoding/json"
 	"fmt"
+	"net/url"
 	"strings"
 
-	"github.com/golang/glog"
-
-	"encoding/json"
-	"net/url"
+	"k8s.io/klog/v2"
 
 	"github.com/jparklab/synology-csi/pkg/synology/core"
 )
@@ -158,7 +157,7 @@ func (l *lunAPI) List() ([]Lun, error) {
 
 	var luns []Lun
 	if jsonLunErr := json.Unmarshal(*data["luns"], &luns); jsonLunErr != nil {
-		glog.Errorf("Failed to parse Lun list: %s(%s)", *data["luns"], jsonLunErr)
+		klog.Errorf("Failed to parse Lun list: %s(%s)", *data["luns"], jsonLunErr)
 		return nil, jsonLunErr
 	}
 
@@ -179,7 +178,7 @@ func (l *lunAPI) Get(id string) (*Lun, error) {
 
 	var lun Lun
 	if jsonLunErr := json.Unmarshal(*data["lun"], &lun); jsonLunErr != nil {
-		glog.Errorf("Failed to parse Lun: %s(%s)", *data["lun"], jsonLunErr)
+		klog.Errorf("Failed to parse Lun: %s(%s)", *data["lun"], jsonLunErr)
 		return nil, jsonLunErr
 	}
 
@@ -207,7 +206,7 @@ func (l *lunAPI) Create(
 	// uuid can be quoted
 	uuid = strings.Trim(uuid, "\"")
 
-	glog.V(5).Infof("Created a LUN: %s", uuid)
+	klog.V(1).Infof("Created a LUN: %s", uuid)
 
 	return l.Get(uuid)
 }
@@ -229,7 +228,7 @@ func (l *lunAPI) Update(
 		"new_size": {fmt.Sprintf("%d", size)},
 	})
 
-	glog.V(5).Infof("Updated a LUN: %s", id)
+	klog.V(1).Infof("Updated a LUN: %s", id)
 
 	return err
 }
