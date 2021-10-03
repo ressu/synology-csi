@@ -1,0 +1,65 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: synology-csi-attacher
+  namespace: synology-csi
+---
+# Imported from external-attacher v3.3.0
+#
+# Attacher must be able to work with PVs, nodes and VolumeAttachments
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: external-attacher-role
+rules:
+  - resources: ["persistentvolumes"]
+    apiGroups: [""]
+    verbs: ["get", "list", "watch", "patch"]
+  - resources: ["csinodes"]
+    apiGroups: ["storage.k8s.io"]
+    verbs: ["get", "list", "watch"]
+  - resources: ["volumeattachments"]
+    apiGroups: ["storage.k8s.io"]
+    verbs: ["get", "list", "watch", "patch"]
+  - resources: ["volumeattachments/status"]
+    apiGroups: ["storage.k8s.io"]
+    verbs: ["patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: synology-csi-attacher-role
+roleRef:
+  name: external-attacher-role
+  kind: ClusterRole
+  apiGroup: rbac.authorization.k8s.io
+subjects:
+  - name: synology-csi-attacher
+    namespace: synology-csi
+    kind: ServiceAccount
+---
+# Imported from external-attacher v3.3.0
+#
+# Attacher must be able to work with configmaps or leases in the current namespace
+# if (and only if) leadership election is enabled
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: external-attacher-cfg
+rules:
+  - resources: ["leases"]
+    apiGroups: ["coordination.k8s.io"]
+    verbs: ["get", "watch", "list", "delete", "update", "create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: synology-csi-attacher-role-cfg
+roleRef:
+  name: external-attacher-cfg
+  kind: Role
+  apiGroup: rbac.authorization.k8s.io
+subjects:
+  - name: synology-csi-attacher
+    namespace: synology-csi
+    kind: ServiceAccount

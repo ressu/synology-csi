@@ -1,0 +1,13 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - attacher.yml
+  - attacher-rbac.yml
+  - csi_driver.yml
+  - namespace.yml
+  - node.yml
+  - provisioner.yml
+  - provisioner-rbac.yml
+  - resizer.yml
+  - resizer-rbac.yml
+  - storage_class.yml

@@ -1,0 +1,31 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# The namespace you want to deploy to
+namespace: synology-csi
+
+# include resources from the specific deployment
+resources:
+  - ../microk8s
+
+# It's a good practice to control the version that is deployed to clusters
+images:
+  - name: "ghcr.io/ressu/synology-csi:v1"
+    newTag: v1.19.0
+
+# Update tags in the storage class definition through a patch
+patches:
+  - path: storage_class-patch.yaml
+    target:
+      kind: StorageClass
+      group: storage.k8s.io
+      version: v1
+
+# Insert secrets for the CSI deployment
+#
+# NOTE: if you store your configuration in version control (like git), make
+# sure not to commit your passwords there.
+secretGenerator:
+  - name: synology-config
+    files:
+      - "syno-config.yml"

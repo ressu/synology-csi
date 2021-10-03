@@ -1,0 +1,69 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: synology-csi-resizer
+  namespace: synology-csi
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: synology-csi-resizer
+  template:
+    metadata:
+      labels:
+        app: synology-csi-resizer
+    spec:
+      serviceAccountName: synology-csi-resizer
+      hostNetwork: true
+      containers:
+        - name: csi-plugin
+          image: ghcr.io/ressu/synology-csi:v1
+          args:
+            - --nodeid
+            - NotUsed
+            - --endpoint=$(CSI_ENDPOINT)
+            - --synology-config
+            - /etc/synology/syno-config.yml
+            - --logtostderr
+          env:
+            - name: CSI_ENDPOINT
+              value: unix:///plugin/csi.sock
+            - name: DEVICE_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          volumeMounts:
+            - name: plugin-dir
+              mountPath: /plugin/
+            - name: synology-config
+              readOnly: true
+              mountPath: /etc/synology
+          imagePullPolicy: Always
+          securityContext:
+            allowPrivilegeEscalation: true
+            capabilities:
+              add: ["SYS_ADMIN"]
+            privileged: true
+        - name: csi-resizer
+          image: k8s.gcr.io/sig-storage/csi-resizer:v1.3.0
+          args:
+            - --csi-address=$(ADDRESS)
+          env:
+            - name: ADDRESS
+              value: /plugin/csi.sock
+          volumeMounts:
+            - name: plugin-dir
+              mountPath: /plugin
+          imagePullPolicy: Always
+          securityContext:
+            allowPrivilegeEscalation: true
+            capabilities:
+              add: ["SYS_ADMIN"]
+            privileged: true
+      volumes:
+        - name: plugin-dir
+          emptyDir: {}
+        - name: synology-config
+          secret:
+            secretName: synology-config
+  serviceName: "synology-csi-resizer"

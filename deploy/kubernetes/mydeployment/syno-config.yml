@@ -1,0 +1,7 @@
+host: 10.2.7.22
+port: 5000
+sslVerify: false
+username: k8s-csi
+password: "Hunter2"
+sessionName: Core
+loginApiVersion: 6

@@ -1,0 +1,70 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: synology-csi-provisioner
+  namespace: synology-csi
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: synology-csi-provisioner
+  template:
+    metadata:
+      labels:
+        app: synology-csi-provisioner
+    spec:
+      serviceAccountName: synology-csi-provisioner
+      hostNetwork: true
+      containers:
+        - name: csi-plugin
+          image: ghcr.io/ressu/synology-csi:v1
+          args:
+            - --nodeid
+            - NotUsed
+            - --endpoint=$(CSI_ENDPOINT)
+            - --synology-config
+            - /etc/synology/syno-config.yml
+            - --logtostderr
+          env:
+            - name: CSI_ENDPOINT
+              value: unix:///var/lib/csi/sockets/pluginproxy/csi.sock
+            - name: DEVICE_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /var/lib/csi/sockets/pluginproxy/
+            - name: synology-config
+              readOnly: true
+              mountPath: /etc/synology
+          imagePullPolicy: Always
+          securityContext:
+            allowPrivilegeEscalation: true
+            capabilities:
+              add: ["SYS_ADMIN"]
+            privileged: true
+        - name: csi-provisioner
+          image: k8s.gcr.io/sig-storage/csi-provisioner:v3.0.0
+          args:
+            - --timeout=60s
+            - --csi-address=$(ADDRESS)
+          env:
+            - name: ADDRESS
+              value: /var/lib/csi/sockets/pluginproxy/csi.sock
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /var/lib/csi/sockets/pluginproxy/
+          imagePullPolicy: Always
+          securityContext:
+            allowPrivilegeEscalation: true
+            capabilities:
+              add: ["SYS_ADMIN"]
+            privileged: true
+      volumes:
+        - name: socket-dir
+          emptyDir: {}
+        - name: synology-config
+          secret:
+            secretName: synology-config
+  serviceName: "synology-csi-provisioner"

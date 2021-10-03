@@ -1,0 +1,30 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: synology-csi-node
+spec:
+  template:
+    spec:
+      containers:
+        - name: csi-driver-registrar
+          args:
+            - --csi-address=$(ADDRESS)
+            - --kubelet-registration-path=/var/snap/microk8s/common/var/lib/kubelet/plugins/csi.synology.com/csi.sock
+        - name: csi-plugin
+          volumeMounts:
+            - name: kubelet-dir
+              mountPath: /var/snap/microk8s/common/var/lib/kubelet
+              mountPropagation: Bidirectional
+      volumes:
+        - name: kubelet-dir
+          hostPath:
+            type: Directory
+            path: /var/snap/microk8s/common/var/lib/kubelet
+        - name: plugin-dir
+          hostPath:
+            type: DirectoryOrCreate
+            path: /var/snap/microk8s/common/var/lib/kubelet/plugins/csi.synology.com/
+        - name: registration-dir
+          hostPath:
+            type: Directory
+            path: /var/snap/microk8s/common/var/lib/kubelet/plugins_registry
