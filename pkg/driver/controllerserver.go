@@ -534,7 +534,7 @@ func (cs *controllerServer) ControllerPublishVolume(ctx context.Context, req *cs
 	}
 
 	if req.GetVolumeCapability() == nil {
-		return nil, status.Error(codes.InvalidArgument, "Volume Capabilites are required")
+		return nil, status.Error(codes.InvalidArgument, "Volume Capabilities are required")
 	}
 	return &csi.ControllerPublishVolumeResponse{}, nil
 }
