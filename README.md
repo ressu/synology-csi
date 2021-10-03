@@ -1,14 +1,24 @@
-# synology-csi ![Docker image](https://github.com/jparklab/synology-csi/workflows/Docker%20image/badge.svg) ![Go Report Card](https://goreportcard.com/badge/github.com/jparklab/synology-csi)
-
+# synology-csi [![Go Report Card](https://goreportcard.com/badge/github.com/ressu/synology-csi)](https://goreportcard.com/report/github.com/ressu/synology-csi)
 A [Container Storage Interface](https://github.com/container-storage-interface) Driver for Synology NAS.
+
+This version of synology-csi is a fork of the
+[synology-csi](https://github.com/jparklab/synology-csi) created by [Ji-Young
+Park](https://github.com/jparklab). Fork has been updated to [CSI spec
+v1.5.0](https://github.com/container-storage-interface/spec/releases/tag/v1.5.0).
 
 # Platforms Supported
 
- The driver supports linux only since it requires `iscsiadm` to be installed on the host. It is currently tested with Ubuntu 16.04, Ubuntu 18.04, and [Alpine](https://alpinelinux.org/).
+ The driver supports linux only since it requires `iscsiadm` to be installed on
+ the host. It is currently tested with Ubuntu 21.04.
 
- We have pre-built Docker [images](https://hub.docker.com/r/jparklab/synology-csi) for amd64, arm64, armv7 architectures.
+ We have pre-built Docker [images](https://ghcr.io/ressu/synology-csi) for
+ amd64, arm64, armv7 and ppc64le architectures.
 
 # Quickstart Guide
+
+NOTE: this section hasn't been fully updated to match with the fork, in general
+you can follow the example Kubernetes configuration, which uses the relevant
+bits and bobs to make things happen.
 
 ## Synology Configuration:
 
@@ -48,27 +58,12 @@ Make sure that `iscsiadm` is installed on all the nodes where you want this atta
 
 # Build
 
-## Build package
+For convenience, a [Makefile](Makefile]) is provided to build...
 
-```bash
-make
-```
+* ...a standalone binary as `/synology-csi-driver`
+* ...a docker container as `synology-csi-dev`
 
-## Build Docker Image
-
-```bash
-# e.g. docker build -t jparklab/synology-csi .
-docker build [-f Dockerfile] -t <repo>[:<tag>] .
-```
-
-## Build Docker Multi-architecture Images
-
-In order to build a multiarch image, you must have Docker 19.03 or higher version that supports [buildx](https://docs.docker.com/buildx/working-with-buildx/)
-
-```bash
-# e.g. ./build.sh -t jparklab/synology-csi
-./build.sh -t <repo>[:<tag>] .
-```
+Run `make` and `make docker-image` respectively to build the binaries.
 
 # Test
 
@@ -122,12 +117,6 @@ csc controller delete-volume  -e tcp://127.0.0.1:10000 <volume id>
 ```
 # Deploy
 
-## Ensure Kubernetes Cluster is Configured for CSI Drivers
-
-  For Kubernetes v1.12, and v1.13, feature gates need to be enabled to use CSI drivers.
-  Follow instructions on https://kubernetes-csi.github.io/docs/csi-driver-object.html and https://kubernetes-csi.github.io/docs/csi-node-object.html
-  to set up your Kubernetes cluster.
-
 ## Create a config file <a name='config'></a>
 
 ```yaml
@@ -150,7 +139,12 @@ deviceName: <name>         # Optional. Only for versions 6 and above.
 
 ## Create a Secret from the syno-config.yml file
 
-    kubectl create secret -n synology-csi generic synology-config --from-file=syno-config.yml
+Kubernetes secret can be deployed manually or by using the Kustomize `secretGenerator ` as described in [example deployment](deploy/kubernetes)
+
+Manual deployment:
+```
+kubectl create secret -n synology-csi generic synology-config --from-file=syno-config.yml
+```
 
 ### (Optional) Use https with self-signed CA
 
@@ -188,9 +182,9 @@ volumes:
 
 ## Deploy to Kubernetes
 
-```bash
-kubectl apply -f deploy/kubernetes/v1.15
-```
+An [example deployment](deploy/kubernetes) and description [how to
+use](deploy/kubernetes/README.md) the files is provided. The example deployment
+can be used as is or included in a separate deployment repository.
 
 ### Parameters for the StorageClass and Synology
 
