@@ -16,8 +16,6 @@ builds:
       - ppc64le
     goarm:
       - 7
-    ldflags:
-      - -extldflags "-static"
 
 # docker rules, overly verbose but it is what is is..
 dockers:
